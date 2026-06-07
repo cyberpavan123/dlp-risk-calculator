@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LLM Perimeter Security Risk Calculator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.55;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 24px 16px;
+      background: #eef2fb;
+      color: #0f172a;
+    }
+
+    .panel {
+      width: min(900px, 100%);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    /* ── Banner ─────────────────────────────────────── */
+    .banner {
+      padding: 22px 28px;
+      border-radius: 20px 20px 0 0;
+      background: linear-gradient(135deg, #1e40af 0%, #6d28d9 100%);
+      color: #fff;
+    }
+    .banner h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 4px; }
+    .banner p  { font-size: 0.9rem; opacity: 0.82; }
+
+    /* ── Card sections ──────────────────────────────── */
+    .section {
+      background: #fff;
+      padding: 24px 28px;
+    }
+    .section:last-child { border-radius: 0 0 20px 20px; }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .step-num {
+      width: 26px; height: 26px;
+      border-radius: 50%;
+      background: #1e40af;
+      color: #fff;
+      font-size: 0.8rem;
+      font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .section-title {
+      font-weight: 700; font-size: 0.97rem; color: #1e293b; flex: 1;
+    }
+    .section-hint { font-size: 0.8rem; color: #94a3b8; }
+
+    /* ── Tier badges ────────────────────────────────── */
+    .tier-badge {
+      font-size: 0.68rem; font-weight: 700;
+      padding: 2px 7px; border-radius: 999px; white-space: nowrap; flex-shrink: 0;
+    }
+    .t3 { background: #fef3c7; color: #92400e; }
+    .t4 { background: #ffedd5; color: #c2410c; }
+    .t5 { background: #fee2e2; color: #991b1b; }
+    .t6 { background: #3b0764; color: #e9d5ff; }
+    .tw { background: #fef9c3; color: #854d0e; }
+
+    /* ── Data-type cards ────────────────────────────── */
+    .data-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(246px, 1fr));
+      gap: 10px;
+    }
+
+    .data-card {
+      border: 2px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 14px 15px 12px;
+      cursor: pointer;
+      transition: border-color 0.14s, background 0.14s, box-shadow 0.14s;
+      display: flex; flex-direction: column; gap: 5px;
+      background: #f8fafc;
+      user-select: none;
+    }
+    .data-card:hover { border-color: #93c5fd; background: #f0f7ff; }
+    .data-card.selected { border-color: #3b82f6; background: #eff6ff; box-shadow: 0 0 0 1px #93c5fd; }
+    .data-card.warn-card.selected { border-color: #f59e0b; background: #fffbeb; box-shadow: 0 0 0 1px #fcd34d; }
+
+    .dc-header { display: flex; align-items: flex-start; gap: 9px; }
+    .dc-check { margin-top: 3px; width: 16px; height: 16px; flex-shrink: 0; accent-color: #2563eb; cursor: pointer; }
+    .dc-title { font-weight: 600; font-size: 0.88rem; flex: 1; color: #0f172a; }
+    .dc-desc { font-size: 0.78rem; color: #64748b; margin-left: 25px; }
+
+    .dc-requires {
+      display: none; margin-left: 25px; margin-top: 2px;
+    }
+    .data-card.selected .dc-requires { display: block; }
+
+    .req-label { font-size: 0.7rem; color: #475569; margin-bottom: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+    .req-pills { display: flex; flex-wrap: wrap; gap: 4px; }
+    .req-pill {
+      display: inline-flex; align-items: center; gap: 3px;
+      padding: 2px 7px; border-radius: 6px; font-size: 0.7rem; font-weight: 600; line-height: 1.4;
+    }
+    .rp-ok   { background: #dcfce7; color: #166534; }
+    .rp-miss { background: #fee2e2; color: #991b1b; }
+
+    /* ── Control cards ──────────────────────────────── */
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(246px, 1fr));
+      gap: 10px;
+    }
+
+    .control-card {
+      border: 2px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 14px 15px 12px;
+      cursor: pointer;
+      transition: border-color 0.14s, background 0.14s;
+      display: flex; flex-direction: column; gap: 5px;
+      background: #f8fafc;
+      user-select: none;
+    }
+    .control-card:hover { border-color: #94a3b8; background: #f1f5f9; }
+    .control-card.ctrl-required-met     { border-color: #4ade80; background: #f0fdf4; }
+    .control-card.ctrl-required-missing { border-color: #f87171; background: #fff5f5; }
+
+    .cc-header { display: flex; align-items: flex-start; gap: 9px; }
+    .cc-check { margin-top: 3px; width: 16px; height: 16px; flex-shrink: 0; accent-color: #16a34a; cursor: pointer; }
+    .cc-title { font-weight: 600; font-size: 0.88rem; flex: 1; color: #0f172a; }
+    .cc-desc { font-size: 0.78rem; color: #64748b; margin-left: 25px; }
+
+    .req-by { display: none; margin-left: 25px; margin-top: 2px; font-size: 0.72rem; font-weight: 600; }
+    .req-by.visible { display: block; }
+    .req-by.rb-ok   { color: #16a34a; }
+    .req-by.rb-miss { color: #dc2626; }
+
+    /* ── Result card ────────────────────────────────── */
+    .result-wrap {
+      border: 1px solid #e2e8f0; border-radius: 16px;
+      padding: 20px 22px; background: #f8fafc;
+    }
+
+    .result-top { display: flex; align-items: flex-start; gap: 18px; margin-bottom: 16px; }
+
+    .grade-bubble {
+      width: 68px; height: 68px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2.1rem; font-weight: 900; flex-shrink: 0;
+      transition: background 0.35s, color 0.35s;
+    }
+    .ga { background: #dcfce7; color: #14532d; }
+    .gb { background: #d1fae5; color: #065f46; }
+    .gc { background: #fef9c3; color: #713f12; }
+    .gd { background: #ffedd5; color: #9a3412; }
+    .ge { background: #fee2e2; color: #991b1b; }
+    .gf { background: #fecaca; color: #7f1d1d; }
+
+    .result-text h2 { font-size: 1rem; font-weight: 700; color: #1e293b; margin-bottom: 3px; }
+    .result-text p  { font-size: 0.83rem; color: #475569; }
+
+    /* ── Risk track ─────────────────────────────────── */
+    .track-wrap { margin: 6px 0 2px; }
+    .track-bar {
+      height: 11px; border-radius: 999px; background: #e2e8f0; overflow: hidden;
+    }
+    .track-fill {
+      height: 100%; border-radius: 999px;
+      transition: width 0.38s ease, background-color 0.38s ease;
+    }
+    .track-axis {
+      display: flex; justify-content: space-between;
+      font-size: 0.68rem; color: #94a3b8; margin-top: 3px; margin-bottom: 14px;
+    }
+
+    /* ── Guidance accordion ─────────────────────────── */
+    .guidance-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .tier-row {
+      border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden;
+    }
+    .tier-row-hdr {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 13px; background: #f1f5f9; cursor: pointer;
+    }
+    .tier-row-hdr:hover { background: #e8eef8; }
+    .trh-label { font-weight: 700; font-size: 0.85rem; flex: 1; }
+    .trh-count { font-size: 0.78rem; color: #64748b; }
+    .trh-pct {
+      font-size: 0.75rem; font-weight: 700;
+      padding: 2px 8px; border-radius: 999px;
+    }
+    .pp-ok   { background: #dcfce7; color: #166534; }
+    .pp-warn { background: #fef3c7; color: #92400e; }
+    .pp-bad  { background: #fee2e2; color: #991b1b; }
+    .trh-arrow { font-size: 0.75rem; color: #94a3b8; transition: transform 0.15s; }
+    .tier-row-hdr[aria-expanded="true"] .trh-arrow { transform: rotate(90deg); }
+
+    .tier-row-body { display: none; padding: 10px 13px; flex-wrap: wrap; gap: 6px; }
+    .tier-row-body.open { display: flex; }
+
+    .ctrl-chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 9px; border-radius: 7px; font-size: 0.77rem;
+    }
+    .chip-ok   { background: #dcfce7; color: #166534; }
+    .chip-miss { background: #fee2e2; color: #991b1b; }
+
+    /* ── Status banner ──────────────────────────────── */
+    .status {
+      margin-top: 14px; padding: 12px 16px; border-radius: 12px;
+      font-size: 0.85rem; font-weight: 600; line-height: 1.5;
+    }
+    .st-safe    { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    .st-warn    { background: #fff5f5; color: #991b1b; border: 1px solid #fecaca; }
+    .st-caution { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+
+    .footnote { margin-top: 12px; font-size: 0.76rem; color: #94a3b8; }
+
+    /* ── Empty state ────────────────────────────────── */
+    .empty-state {
+      padding: 18px 0 6px; text-align: center; color: #94a3b8;
+      font-size: 0.85rem;
+    }
+
+    @media (max-width: 580px) {
+      .data-grid, .control-grid { grid-template-columns: 1fr; }
+      .section { padding: 18px 16px; }
+      .banner  { padding: 18px 20px; }
+    }
+  </style>
+</head>
+<body>
+<div class="panel">
+
+  <div class="banner">
+    <h1>LLM Perimeter Security Risk Calculator</h1>
+    <p>Select the data types your pipeline handles and the controls in place. The calculator shows your real-time coverage grade and which guardrails each data tier requires.</p>
+  </div>
+
+  <!-- Step 1 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-num">1</div>
+      <div class="section-title">Which data types does your LLM pipeline handle?</div>
+      <div class="section-hint">Select all that apply</div>
+    </div>
+    <div class="data-grid" id="dataGrid"></div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-num">2</div>
+      <div class="section-title">Which security controls are implemented?</div>
+      <div class="section-hint">Check everything in place</div>
+    </div>
+    <div class="control-grid" id="controlGrid"></div>
+  </div>
+
+  <!-- Step 3 -->
+  <div class="section">
+    <div class="section-header">
+      <div class="step-num">3</div>
+      <div class="section-title">Risk Assessment</div>
+    </div>
+
+    <div class="result-wrap">
+      <div class="result-top">
+        <div class="grade-bubble ga" id="gradeEl">A</div>
+        <div class="result-text">
+          <h2 id="gradeDesc">No sensitive data selected</h2>
+          <p id="scoreDetail">Score: 100 · All required controls are satisfied</p>
+        </div>
+      </div>
+
+      <div class="track-wrap">
+        <div class="track-bar" aria-label="Coverage score">
+          <div class="track-fill" id="trackFill" style="width:100%;background:#22c55e;"></div>
+        </div>
+        <div class="track-axis">
+          <span>0% — No controls</span>
+          <span>50% — Partial</span>
+          <span>100% — Full coverage</span>
+        </div>
+      </div>
+
+      <div class="guidance-list" id="guidanceList" aria-live="polite">
+        <div class="empty-state">Select a data type above to see which controls are required.</div>
+      </div>
+
+      <div class="status st-safe" id="statusMsg">
+        No sensitive data selected. Basic input sanitization and prompt-injection protection are still recommended for all LLM integrations.
+      </div>
+
+      <p class="footnote">
+        Score = weighted control coverage across selected tiers. Tier 6 carries 4× the weight of Tier 3, so gaps on highly regulated data have the largest impact.
+      </p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ── Data configuration ─────────────────────────────────────────────
+  // tier: null = special risk factor (no controls associated)
+  // controls: IDs of controls required for this data type
+  const DATA_TYPES = [
+    {
+      id: 'data-pii',
+      tier: 4, tierLabel: 'Tier 4 — PII',
+      label: 'PII / User-identifiable data',
+      desc: 'Names, addresses, national IDs, user profiles',
+      controls: ['ctrl-tokenization', 'ctrl-rbac', 'ctrl-audit', 'ctrl-tls', 'ctrl-validation'],
+    },
+    {
+      id: 'data-emails',
+      tier: 4, tierLabel: 'Tier 4 — PII',
+      label: 'Emails / Contact data',
+      desc: 'Email addresses, phone numbers, contact records',
+      controls: ['ctrl-tokenization', 'ctrl-rbac', 'ctrl-audit', 'ctrl-tls', 'ctrl-validation'],
+    },
+    {
+      id: 'data-transactions',
+      tier: 3, tierLabel: 'Tier 3 — Confidential',
+      label: 'Transaction / Financial records',
+      desc: 'Revenue data, billing history, financial forecasts',
+      controls: ['ctrl-encryption', 'ctrl-rbac', 'ctrl-tls', 'ctrl-validation'],
+    },
+    {
+      id: 'data-internal-keys',
+      tier: 5, tierLabel: 'Tier 5 — Regulated',
+      label: 'Internal keys / Credentials',
+      desc: 'Service accounts, API secrets, database passwords',
+      controls: ['ctrl-dlp', 'ctrl-blocks', 'ctrl-rbac', 'ctrl-encryption', 'ctrl-tls'],
+    },
+    {
+      id: 'data-api-tokens',
+      tier: 5, tierLabel: 'Tier 5 — Regulated',
+      label: 'API tokens / Session secrets',
+      desc: 'OAuth tokens, session IDs, signing keys',
+      controls: ['ctrl-dlp', 'ctrl-blocks', 'ctrl-rbac', 'ctrl-tls', 'ctrl-validation'],
+    },
+    {
+      id: 'data-pci',
+      tier: 5, tierLabel: 'Tier 5 — Regulated',
+      label: 'PCI / Regulated payment IDs',
+      desc: 'Credit card numbers, account IDs, tax identifiers',
+      controls: ['ctrl-dlp', 'ctrl-rbac', 'ctrl-tls', 'ctrl-audit', 'ctrl-blocks'],
+    },
+    {
+      id: 'data-phi',
+      tier: 6, tierLabel: 'Tier 6 — Highly Regulated',
+      label: 'PHI / Biometric / Passport data',
+      desc: 'Health records, biometrics, genetic data, passports',
+      controls: ['ctrl-dlp', 'ctrl-rbac', 'ctrl-encryption', 'ctrl-tls', 'ctrl-audit', 'ctrl-blocks'],
+    },
+    {
+      id: 'data-prompts',
+      tier: null, tierLabel: 'Risk factor',
+      label: 'Security relies on system prompts',
+      desc: 'Prompt-only guardrails are bypassable — classify data types above to see required code-layer controls',
+      controls: [],
+      isWarn: true,
+    },
+  ];
+
+  const CONTROLS = [
+    {
+      id: 'ctrl-tokenization',
+      label: 'Tokenization / Data vaulting',
+      desc: 'Replaces PII with opaque tokens in an encrypted vault before the prompt is sent.',
+    },
+    {
+      id: 'ctrl-blocks',
+      label: 'Application-level blocks',
+      desc: 'Hard-blocks known sensitive patterns and unsafe outputs at the application layer.',
+    },
+    {
+      id: 'ctrl-validation',
+      label: 'Outbound response validation',
+      desc: 'Filters and validates LLM responses before they reach the client.',
+    },
+    {
+      id: 'ctrl-rbac',
+      label: 'RBAC before prompt construction',
+      desc: 'Enforces role-based access before any internal data is included in a prompt.',
+    },
+    {
+      id: 'ctrl-encryption',
+      label: 'Encryption at rest',
+      desc: 'Encrypts stored confidential data (AES-256 or equivalent) for data-at-rest protection.',
+    },
+    {
+      id: 'ctrl-dlp',
+      label: 'DLP scanning (Tier 5/6 block)',
+      desc: 'Scans and hard-blocks regulated data before it enters the LLM pipeline.',
+    },
+    {
+      id: 'ctrl-tls',
+      label: 'TLS / Transport encryption',
+      desc: 'Enforces HTTPS/TLS for all LLM calls to prevent interception in transit.',
+    },
+    {
+      id: 'ctrl-audit',
+      label: 'Audit logging',
+      desc: 'Logs all sensitive-data access and LLM exchanges (Tier 6 payload content must not be logged).',
+    },
+  ];
+
+  const CTRL_LABELS = Object.fromEntries(CONTROLS.map((c) => [c.id, c.label]));
+  const TIER_WEIGHTS = { 3: 1, 4: 2, 5: 3, 6: 4 };
+
+  const TIER_BADGE_CLASS = { 3: 't3', 4: 't4', 5: 't5', 6: 't6', null: 'tw' };
+
+  // ── Render data-type cards ─────────────────────────────────────────
+  const dataGrid = document.getElementById('dataGrid');
+  DATA_TYPES.forEach(({ id, tier, tierLabel, label, desc, isWarn }) => {
+    const bc = TIER_BADGE_CLASS[tier] || 'tw';
+    const warnClass = isWarn ? ' warn-card' : '';
+    const card = document.createElement('label');
+    card.className = 'data-card' + warnClass;
+    card.id = 'dc-' + id;
+    card.setAttribute('for', id);
+    card.innerHTML =
+      '<div class="dc-header">' +
+        '<input class="dc-check" type="checkbox" id="' + id + '" />' +
+        '<div class="dc-title">' + label + '</div>' +
+        '<span class="tier-badge ' + bc + '">' + tierLabel + '</span>' +
+      '</div>' +
+      '<div class="dc-desc">' + desc + '</div>' +
+      '<div class="dc-requires" id="dcr-' + id + '">' +
+        '<div class="req-label">Required controls</div>' +
+        '<div class="req-pills" id="rp-' + id + '"></div>' +
+      '</div>';
+    dataGrid.appendChild(card);
+  });
+
+  // ── Render control cards ───────────────────────────────────────────
+  const controlGrid = document.getElementById('controlGrid');
+  CONTROLS.forEach(({ id, label, desc }) => {
+    const card = document.createElement('label');
+    card.className = 'control-card';
+    card.id = 'cc-' + id;
+    card.setAttribute('for', id);
+    card.innerHTML =
+      '<div class="cc-header">' +
+        '<input class="cc-check" type="checkbox" id="' + id + '" />' +
+        '<div class="cc-title">' + label + '</div>' +
+      '</div>' +
+      '<div class="cc-desc">' + desc + '</div>' +
+      '<div class="req-by" id="rb-' + id + '"></div>';
+    controlGrid.appendChild(card);
+  });
+
+  // ── Attach listeners ───────────────────────────────────────────────
+  document.querySelectorAll('input[type=checkbox]').forEach((cb) => {
+    cb.addEventListener('change', update);
+  });
+
+  // ── Main update loop ───────────────────────────────────────────────
+  function update() {
+    const s = {};
+    [...DATA_TYPES, ...CONTROLS].forEach(({ id }) => {
+      s[id] = document.getElementById(id).checked;
+    });
+
+    const relyPrompts = s['data-prompts'];
+    const selectedData = DATA_TYPES.filter(({ id, tier }) => tier !== null && s[id]);
+    const anyData = selectedData.length > 0;
+
+    // ── 1. Update data-card required-pill state ──────────────────────
+    DATA_TYPES.forEach(({ id, controls }) => {
+      document.getElementById('dc-' + id).classList.toggle('selected', s[id]);
+      const pillBox = document.getElementById('rp-' + id);
+      pillBox.innerHTML = controls.map((cid) => {
+        const has = s[cid];
+        return '<span class="req-pill ' + (has ? 'rp-ok' : 'rp-miss') + '">' +
+          (has ? '&#10003;' : '&#10007;') + ' ' + CTRL_LABELS[cid] +
+          '</span>';
+      }).join('');
+    });
+
+    // ── 2. Update control-card required-by indicators ────────────────
+    CONTROLS.forEach(({ id }) => {
+      const requiredByTypes = DATA_TYPES.filter((dt) => s[dt.id] && dt.controls.includes(id));
+      const isRequired = requiredByTypes.length > 0;
+      const isPresent  = s[id];
+      const card  = document.getElementById('cc-' + id);
+      const reqEl = document.getElementById('rb-' + id);
+
+      card.classList.remove('ctrl-required-met', 'ctrl-required-missing');
+      reqEl.className = 'req-by';
+
+      if (isRequired) {
+        const names = requiredByTypes.map((dt) => dt.label.split(' /')[0].split(' /')[0]).join(', ');
+        if (isPresent) {
+          card.classList.add('ctrl-required-met');
+          reqEl.classList.add('visible', 'rb-ok');
+          reqEl.textContent = '✓ Required by: ' + names;
+        } else {
+          card.classList.add('ctrl-required-missing');
+          reqEl.classList.add('visible', 'rb-miss');
+          reqEl.textContent = '✗ Required by: ' + names;
+        }
+      }
+    });
+
+    // ── 3. Compute weighted coverage score ───────────────────────────
+    let score;
+    let totalWeight = 0;
+    let weightedCoverage = 0;
+    const breakdown = [];
+
+    if (!anyData && !relyPrompts) {
+      score = 100;
+    } else if (!anyData && relyPrompts) {
+      // Relying on prompts alone with no classified data is still a risk
+      score = 72;
+    } else {
+      selectedData.forEach(({ id, tier, label, controls }) => {
+        const w = TIER_WEIGHTS[tier] || 1;
+        const present = controls.filter((c) => s[c]).length;
+        const coverage = controls.length ? present / controls.length : 1;
+        totalWeight += w;
+        weightedCoverage += w * coverage;
+        breakdown.push({ label, tier, controls, coverage, present });
+      });
+
+      score = totalWeight > 0 ? Math.round((weightedCoverage / totalWeight) * 100) : 100;
+
+      // Penalty for relying on system prompts for security guardrails
+      if (relyPrompts) score = Math.max(0, score - 15);
+
+      // Hard cap: Tier 6 without DLP — primary control missing
+      if (selectedData.some((dt) => dt.tier === 6) && !s['ctrl-dlp']) {
+        score = Math.min(score, 40);
+      }
+      // Hard cap: Tier 5 without DLP
+      if (selectedData.some((dt) => dt.tier === 5) && !s['ctrl-dlp']) {
+        score = Math.min(score, 55);
+      }
+
+      score = Math.max(0, Math.min(100, score));
+    }
+
+    // ── 4. Grade ─────────────────────────────────────────────────────
+    let grade, gradeCls, gradeDesc;
+    if      (score >= 90) { grade = 'A'; gradeCls = 'ga'; gradeDesc = 'Excellent perimeter coverage.'; }
+    else if (score >= 75) { grade = 'B'; gradeCls = 'gb'; gradeDesc = 'Good coverage — a few controls need attention.'; }
+    else if (score >= 60) { grade = 'C'; gradeCls = 'gc'; gradeDesc = 'Moderate risk — key controls are missing.'; }
+    else if (score >= 45) { grade = 'D'; gradeCls = 'gd'; gradeDesc = 'High risk — significant control gaps present.'; }
+    else if (score >= 25) { grade = 'E'; gradeCls = 'ge'; gradeDesc = 'Severe risk — urgent hardening required.'; }
+    else                  { grade = 'F'; gradeCls = 'gf'; gradeDesc = 'Critical risk — most required controls are absent.'; }
+
+    // ── 5. Render result card ────────────────────────────────────────
+    const gradeEl = document.getElementById('gradeEl');
+    gradeEl.textContent = grade;
+    gradeEl.className   = 'grade-bubble ' + gradeCls;
+
+    document.getElementById('gradeDesc').textContent = gradeDesc;
+
+    const dataNames = selectedData.map((dt) => dt.label.split(' /')[0]).join(', ');
+    document.getElementById('scoreDetail').textContent =
+      'Score: ' + score +
+      (anyData ? ' · Handling: ' + dataNames : ' · No sensitive data selected');
+
+    const fill = document.getElementById('trackFill');
+    fill.style.width = score + '%';
+    fill.style.backgroundColor =
+      score >= 90 ? '#22c55e' :
+      score >= 75 ? '#84cc16' :
+      score >= 60 ? '#f59e0b' :
+      score >= 45 ? '#f97316' : '#ef4444';
+
+    // ── 6. Guidance accordion ────────────────────────────────────────
+    const guidanceList = document.getElementById('guidanceList');
+    if (!anyData) {
+      guidanceList.innerHTML = '<div class="empty-state">Select a data type above to see which controls are required.</div>';
+    } else {
+      const rows = breakdown.map(({ label, tier, controls, coverage, present }) => {
+        const pct = Math.round(coverage * 100);
+        const pctCls = pct === 100 ? 'pp-ok' : pct >= 50 ? 'pp-warn' : 'pp-bad';
+        const chips = controls.map((cid) =>
+          '<span class="ctrl-chip ' + (s[cid] ? 'chip-ok' : 'chip-miss') + '">' +
+          (s[cid] ? '✓' : '✗') + ' ' + CTRL_LABELS[cid] +
+          '</span>'
+        ).join('');
+        return (
+          '<div class="tier-row">' +
+            '<div class="tier-row-hdr" role="button" tabindex="0" aria-expanded="false">' +
+              '<span class="trh-label">' + label + '</span>' +
+              '<span class="trh-count">' + present + '/' + controls.length + ' controls</span>' +
+              '<span class="trh-pct ' + pctCls + '">' + pct + '%</span>' +
+              '<span class="trh-arrow">▸</span>' +
+            '</div>' +
+            '<div class="tier-row-body">' + chips + '</div>' +
+          '</div>'
+        );
+      }).join('');
+
+      guidanceList.innerHTML = rows;
+
+      guidanceList.querySelectorAll('.tier-row-hdr').forEach((hdr) => {
+        const body = hdr.nextElementSibling;
+        const toggle = () => {
+          const open = body.classList.toggle('open');
+          hdr.setAttribute('aria-expanded', String(open));
+        };
+        hdr.addEventListener('click', toggle);
+        hdr.addEventListener('keydown', (ev) => {
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggle(); }
+        });
+      });
+    }
+
+    // ── 7. Status message ────────────────────────────────────────────
+    const statusEl = document.getElementById('statusMsg');
+    const hasPHI = selectedData.some((dt) => dt.tier === 6);
+    const hasPCI = selectedData.some((dt) => dt.tier === 5);
+
+    const missingRequired = CONTROLS.filter(({ id }) =>
+      DATA_TYPES.some((dt) => s[dt.id] && dt.controls.includes(id)) && !s[id]
+    ).map(({ label }) => label);
+
+    if (relyPrompts && anyData) {
+      statusEl.textContent = 'CRITICAL: System prompt guardrails are bypassable by adversarial prompts. Security controls must be enforced at the application code layer, not in prompts alone.';
+      statusEl.className = 'status st-warn';
+    } else if (relyPrompts && !anyData) {
+      statusEl.textContent = 'WARNING: Relying on system prompts for security without classifying data types is a risk. Use the controls above to see what code-layer guardrails your pipeline needs.';
+      statusEl.className = 'status st-caution';
+    } else if (!anyData) {
+      statusEl.textContent = 'No sensitive data selected. Basic input sanitization and prompt-injection protection are still recommended for all LLM integrations.';
+      statusEl.className = 'status st-safe';
+    } else if (hasPHI && !s['ctrl-dlp']) {
+      statusEl.textContent = 'CRITICAL: Tier 6 (PHI / biometric) data detected without DLP scanning. This data must be hard-blocked before reaching the LLM — redaction is not sufficient. Enable DLP scanning immediately.';
+      statusEl.className = 'status st-warn';
+    } else if (hasPCI && !s['ctrl-dlp']) {
+      statusEl.textContent = 'CRITICAL: Tier 5 (PCI / regulated) data detected without DLP scanning. This data must be blocked at the application layer before entering the LLM pipeline.';
+      statusEl.className = 'status st-warn';
+    } else if (grade === 'A' || grade === 'B') {
+      statusEl.textContent = missingRequired.length
+        ? 'Good posture. Still missing: ' + missingRequired.join(', ') + '.'
+        : 'All required controls are in place for the selected data types.';
+      statusEl.className = 'status st-safe';
+    } else {
+      statusEl.textContent =
+        'Risk score: ' + score + '. Missing controls: ' + missingRequired.join(', ') + '.';
+      statusEl.className = 'status st-warn';
+    }
+  }
+
+  update();
+</script>
+</body>
+</html>
